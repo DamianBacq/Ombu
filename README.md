@@ -1,46 +1,84 @@
-# Ombú — página modelo (estudio de estética + tienda online)
+# Ombú: turnos y tienda online
 
-Página de demostración del emprendimiento: una marca **ficticia** ("Ombú, estudio de piel") con todo lo que se le puede vender a un cliente:
+Sistema web full stack para un estudio de estética: los clientes reservan turnos con seña y compran productos online, y el dueño maneja agenda, pedidos, stock e ingresos desde un panel. Ombú es una marca ficticia; el proyecto usa la misma arquitectura que desarrollé para un cliente real.
 
-- **Sitio público:** inicio con portada animada, tratamientos, reserva de turnos online en 4 pasos (tratamiento, día y horario con profesional, datos, seña), tienda con filtros y búsqueda, detalle de producto, carrito lateral, checkout con envío o retiro, seguimiento del pedido, estado del turno con cancelación, formulario de contacto, horarios y mapa.
-- **Pagos:** Mercado Pago Checkout Pro + webhook. Sin token cargado funciona en **modo demo** (una pantalla simula el pago aprobado o rechazado).
-- **Panel del dueño** (`/panel`): resumen con ingresos del mes, gráfico de los últimos 30 días (tienda y estudio), más vendidos y stock bajo; pedidos con su estado (pagado, preparando, enviado, entregado); agenda semanal con cobrar / no vino / cancelar; ABM de productos; precios y duración de tratamientos; consultas del formulario.
-- **Datos de ejemplo:** 12 productos, 7 tratamientos, 3 profesionales y 60 días de pedidos y turnos para que el panel se vea con movimiento.
+**Demo online:** https://ombu-zf8g.onrender.com
+**Panel:** https://ombu-zf8g.onrender.com/panel (usuario `admin`, contraseña `ombu2026`)
 
-Usuario del panel: **admin** / **ombu2026**.
+> Está en un plan gratuito: si nadie la usó en un rato, la primera carga tarda unos segundos. Los pagos funcionan en modo demo (se simula la respuesta de Mercado Pago).
+
+![Inicio](docs/inicio.jpg)
+
+| Reserva de turno | Tienda | Panel |
+|---|---|---|
+| ![Reserva](docs/reservar.jpg) | ![Tienda](docs/tienda.jpg) | ![Panel](docs/panel.jpg) |
+
+## Qué hace
+
+**Para el cliente**
+- Reserva de turnos en 4 pasos: tratamiento, día y horario con profesional, datos y pago de la seña (30%).
+- Tienda con filtros, búsqueda, detalle de producto y carrito.
+- Checkout con envío o retiro en el estudio, y seguimiento del pedido.
+- Link para ver el estado del turno y cancelarlo, sin crear cuenta.
+
+**Para el dueño (panel con login)**
+- Resumen del mes: ingresos, gráfico de los últimos 30 días (tienda y estudio), más vendidos y stock bajo.
+- Pedidos por estado: pagado, preparando, enviado, entregado o cancelado.
+- Agenda semanal: cobrar el resto, marcar ausente o cancelar.
+- ABM de productos, precios y duración de tratamientos, y consultas del formulario de contacto.
 
 ## Stack
 
-El estándar del emprendimiento: ASP.NET Core Web API (.NET 10) en capas (Entidades, Datos con Npgsql y SQL a mano, Negocio, Server), React + TypeScript con Vite, PostgreSQL, JWT con BCrypt, Mercado Pago. CSS propio (sin Bootstrap ni Tailwind).
+- **Backend:** C# con ASP.NET Core Web API (.NET 10)
+- **Datos:** PostgreSQL con ADO.NET (Npgsql) y SQL escrito a mano
+- **Frontend:** React con TypeScript (Vite), CSS propio y mobile first
+- **Seguridad:** JWT para el panel y contraseñas con BCrypt
+- **Pagos:** Mercado Pago Checkout Pro con webhook
+- **Deploy:** Docker en Render, base en Neon
 
-## Cómo levantarlo (Visual Studio 2026)
+## Arquitectura
 
-1. **Base de datos:** en pgAdmin, crear la base `ombu` y correr entero el script `BaseDeDatos/ombu.sql` (crea las tablas y carga los datos de ejemplo; se puede volver a correr para resetear todo).
-2. **Contraseña de PostgreSQL:** en `Ombu.Server/appsettings.json` la cadena usa `Password=postgres`. Si la tuya es otra, cargala en los secretos (clic derecho en Ombu.Server > Administrar secretos de usuario):
+Solución en capas con POO, donde cada capa solo usa la de abajo:
+
+```
+ombu.client      React + TypeScript (sitio público y panel)
+Ombu.Server      Web API: controladores REST, JWT, sirve el frontend compilado
+Ombu.Negocio     Reglas de negocio: turnos, pedidos, stock, pagos
+Ombu.Datos       Acceso a datos con Npgsql y SQL parametrizado
+Ombu.Entidades   Clases del dominio y enums
+```
+
+En producción es una sola aplicación: el `Dockerfile` compila el frontend y lo sirve desde el mismo servidor .NET.
+
+**Modelo de datos (12 tablas):** `categoria`, `producto`, `tratamiento`, `profesional`, `horario_atencion`, `cliente`, `turno`, `pedido`, `pedido_item`, `pago`, `consulta`, `usuario`.
+
+## Decisiones técnicas
+
+- **Los precios salen siempre de la base**, nunca de lo que manda el navegador, para que nadie pueda pagar menos modificando la página.
+- **Cada pago se verifica consultando a Mercado Pago** antes de confirmar un turno o un pedido, y se procesa una sola vez aunque lleguen juntos el webhook y la vuelta del cliente.
+- **El stock se descuenta al crear el pedido** y se devuelve solo si no se paga en 30 minutos o si se cancela.
+- **El horario de un turno queda reservado 15 minutos** mientras el cliente paga la seña; si no paga, se libera.
+- **Hora de Argentina en todo el sistema**, calculada desde UTC: el servidor está en otra zona horaria.
+- **Modo demo:** sin token de Mercado Pago, una pantalla simula el pago aprobado o rechazado, así el flujo completo se puede probar sin cobrar.
+
+## Cómo correrlo en local
+
+Requisitos: .NET 10 SDK, Node 22 y PostgreSQL.
+
+1. Crear la base `ombu` y correr `BaseDeDatos/ombu.sql` (crea las tablas y carga datos de ejemplo con fechas relativas a hoy).
+2. Configurar la conexión en los secretos de usuario de `Ombu.Server`:
    ```json
    { "ConnectionStrings": { "Ombu": "Host=localhost;Port=5432;Database=ombu;Username=postgres;Password=TU_CLAVE" } }
    ```
-3. **Paquetes del frontend:** en una terminal dentro de `ombu.client`, correr `npm install` (Visual Studio suele hacerlo solo al abrir la solución).
-4. Abrir `Ombu.sln`, dejar **Ombu.Server** como proyecto de inicio y apretar F5. Arranca la API en `http://localhost:5080` y Vite en `http://localhost:5173` (se abre solo). Si React carga antes que la API, refrescar con F5 en el navegador.
+3. En `ombu.client`, correr `npm install`.
+4. Abrir `Ombu.sln` en Visual Studio y ejecutar `Ombu.Server`, o desde la consola:
+   ```
+   dotnet run --project Ombu.Server
+   cd ombu.client && npm run dev
+   ```
+   y entrar a `http://localhost:5173`.
 
-Sin Visual Studio: `dotnet run --project Ombu.Server` en una terminal y `npm run dev` dentro de `ombu.client` en otra, y entrar a `http://localhost:5173`.
+## Autor
 
-## Mercado Pago real
-
-Cargar en los secretos `MercadoPago:AccessToken` (credenciales de prueba o producción). `MercadoPago:UrlBase` es la dirección pública del sitio (para volver del pago) y `MercadoPago:UrlNotificacion` la del webhook (`https://dominio/api/Pagos/webhook`). Con el token vacío vuelve al modo demo.
-
-## Producción
-
-El `Dockerfile` compila el frontend y lo sirve desde el mismo servidor .NET (una sola app, puerto 8080). Variables de entorno con `__` en lugar de `:` (por ejemplo `ConnectionStrings__Ombu`, `Jwt__Clave`, `Admin__Password`, `MercadoPago__AccessToken`).
-
-## Reglas de negocio
-
-- Turnos de 1 hora, de lunes a viernes de 9 a 19 y sábados de 10 a 14 (tabla `horario_atencion`). Cada profesional atiende los tratamientos de su tipo (facial o corporal). Se reserva hasta 21 días antes.
-- Seña del 30% con Mercado Pago; el horario se guarda 15 minutos mientras se paga. El cliente cancela desde su link hasta 24 horas antes.
-- Pedidos: el stock se descuenta al crear el pedido y se devuelve si no se paga en 30 minutos o si se cancela desde el panel. Envío $4.500, gratis desde $60.000; retiro en el estudio sin costo.
-- Los precios siempre se toman de la base, nunca de lo que manda el navegador. El pago se verifica siempre consultando a Mercado Pago.
-- Fechas en hora de Argentina (`Ajustes.Ahora()`), sin zona horaria en la base.
-
-## Fotos
-
-Las fotos son de Unsplash (licencia libre) y están en `ombu.client/public/img`. Para un cliente real se reemplazan por las suyas.
+**Damián Bacque**, analista funcional y desarrollador full stack jr.
+[Portfolio](https://damianbacque.netlify.app) · [LinkedIn](https://www.linkedin.com/in/damian-bacque/) · damian.bacque235@gmail.com
