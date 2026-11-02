@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+node_modules/
+dist/
+*.user
+Ombu.Server/wwwroot/
+CLAUDE.md
